@@ -1,4 +1,4 @@
-// +build linux
+// +build darwin
 
 /*
    Copyright The containerd Authors.
@@ -22,7 +22,6 @@ import (
 	"context"
 	"sync"
 
-	"github.com/containerd/cgroups"
 	eventstypes "github.com/containerd/containerd/api/events"
 	"github.com/containerd/containerd/api/types/task"
 	"github.com/containerd/containerd/errdefs"
@@ -45,29 +44,17 @@ type Task struct {
 	pid       int
 	shim      *client.Client
 	namespace string
-	cg        cgroups.Cgroup
 	events    *exchange.Exchange
 	tasks     *runtime.TaskList
 	bundle    *bundle
 }
 
 func newTask(id, namespace string, pid int, shim *client.Client, events *exchange.Exchange, list *runtime.TaskList, bundle *bundle) (*Task, error) {
-	var (
-		err error
-		cg  cgroups.Cgroup
-	)
-	if pid > 0 {
-		cg, err = cgroups.Load(cgroups.V1, cgroups.PidPath(pid))
-		if err != nil && err != cgroups.ErrCgroupDeleted {
-			return nil, err
-		}
-	}
 	return &Task{
 		id:        id,
 		pid:       pid,
 		shim:      shim,
 		namespace: namespace,
-		cg:        cg,
 		events:    events,
 		tasks:     list,
 		bundle:    bundle,
@@ -87,7 +74,7 @@ func (t *Task) Namespace() string {
 // Delete the task and return the exit status
 func (t *Task) Delete(ctx context.Context) (*runtime.Exit, error) {
 	rsp, err := t.shim.Delete(ctx, empty)
-	if err != nil && !errdefs.IsNotFound(err) {
+	if err != nil {
 		return nil, errdefs.FromGRPC(err)
 	}
 	t.tasks.Delete(ctx, t.id)
@@ -113,7 +100,6 @@ func (t *Task) Delete(ctx context.Context) (*runtime.Exit, error) {
 // Start the task
 func (t *Task) Start(ctx context.Context) error {
 	t.mu.Lock()
-	hasCgroup := t.cg != nil
 	t.mu.Unlock()
 	r, err := t.shim.Start(ctx, &shim.StartRequest{
 		ID: t.id,
@@ -122,15 +108,6 @@ func (t *Task) Start(ctx context.Context) error {
 		return errdefs.FromGRPC(err)
 	}
 	t.pid = int(r.Pid)
-	if !hasCgroup {
-		cg, err := cgroups.Load(cgroups.V1, cgroups.PidPath(t.pid))
-		if err != nil {
-			return err
-		}
-		t.mu.Lock()
-		t.cg = cg
-		t.mu.Unlock()
-	}
 	t.events.Publish(ctx, runtime.TaskStartEventTopic, &eventstypes.TaskStart{
 		ContainerID: t.id,
 		Pid:         uint32(t.pid),
@@ -316,24 +293,8 @@ func (t *Task) Process(ctx context.Context, id string) (runtime.Process, error) 
 func (t *Task) Stats(ctx context.Context) (*types.Any, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	if t.cg == nil {
-		return nil, errors.Wrap(errdefs.ErrNotFound, "cgroup does not exist")
-	}
-	stats, err := t.cg.Stat(cgroups.IgnoreNotExist)
-	if err != nil {
-		return nil, err
-	}
+	stats := "11"
 	return typeurl.MarshalAny(stats)
-}
-
-// Cgroup returns the underlying cgroup for a linux task
-func (t *Task) Cgroup() (cgroups.Cgroup, error) {
-	t.mu.Lock()
-	defer t.mu.Unlock()
-	if t.cg == nil {
-		return nil, errors.Wrap(errdefs.ErrNotFound, "cgroup does not exist")
-	}
-	return t.cg, nil
 }
 
 // Wait for the task to exit returning the status and timestamp
