@@ -6,6 +6,7 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"github.com/vishvananda/netlink"
+	"github.com/vishvananda/netlink/nl"
 )
 
 const (
@@ -59,7 +60,7 @@ func (i *bridgeInterface) addresses() ([]netlink.Addr, []netlink.Addr, error) {
 		return nil, nil, fmt.Errorf("Failed to retrieve V4 addresses: %v", err)
 	}
 
-	v6addr, err := i.nlh.AddrList(i.Link, netlink.FAMILY_V6)
+	v6addr, err := i.nlh.AddrList(i.Link, nl.FAMILY_V6)
 	if err != nil {
 		return nil, nil, fmt.Errorf("Failed to retrieve V6 addresses: %v", err)
 	}

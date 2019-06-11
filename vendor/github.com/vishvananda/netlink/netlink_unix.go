@@ -1,3 +1,5 @@
+// +build linux darwin
+
 package netlink
 
 import "github.com/vishvananda/netlink/nl"
