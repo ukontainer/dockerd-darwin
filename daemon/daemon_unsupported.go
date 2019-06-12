@@ -1,4 +1,4 @@
-// +build !linux,!freebsd,!windows
+// +build !linux,!freebsd,!windows, !darwin
 
 package daemon // import "github.com/docker/docker/daemon"
 import "github.com/docker/docker/daemon/config"

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 
 	"github.com/containerd/containerd/runtime/linux/runctypes"
 	"github.com/docker/docker/container"
@@ -39,19 +40,23 @@ func (daemon *Daemon) getLibcontainerdCreateOptions(container *container.Contain
 		container.CheckpointTo(daemon.containersReplica)
 	}
 
-	path, err := daemon.getRuntimeScript(container)
-	if err != nil {
-		return nil, err
-	}
-	opts := &runctypes.RuncOptions{
-		Runtime: path,
-		RuntimeRoot: filepath.Join(daemon.configStore.ExecRoot,
-			fmt.Sprintf("runtime-%s", container.HostConfig.Runtime)),
-	}
+	if runtime.GOOS != "darwin" {
+		path, err := daemon.getRuntimeScript(container)
+		if err != nil {
+			return nil, err
+		}
+		opts := &runctypes.RuncOptions{
+			Runtime: path,
+			RuntimeRoot: filepath.Join(daemon.configStore.ExecRoot,
+				fmt.Sprintf("runtime-%s", container.HostConfig.Runtime)),
+		}
 
-	if UsingSystemd(daemon.configStore) {
-		opts.SystemdCgroup = true
-	}
+		if UsingSystemd(daemon.configStore) {
+			opts.SystemdCgroup = true
+		}
 
-	return opts, nil
+		return opts, nil
+	} else {
+		return nil, nil
+	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"github.com/containerd/containerd"
@@ -66,36 +67,68 @@ func deleteTaskAndContainer(ctx context.Context, cli libcontainerdtypes.Client, 
 
 // Create creates a new container
 func (e *Executor) Create(id string, spec specs.Spec, stdout, stderr io.WriteCloser) error {
-	opts := runctypes.RuncOptions{
-		RuntimeRoot: filepath.Join(e.rootDir, "runtime-root"),
-	}
-	ctx := context.Background()
-	err := e.client.Create(ctx, id, &spec, &opts)
-	if err != nil {
-		status, err2 := e.client.Status(ctx, id)
-		if err2 != nil {
-			if !errdefs.IsNotFound(err2) {
-				logrus.WithError(err2).WithField("id", id).Warn("Received an error while attempting to read plugin status")
-			}
-		} else {
-			if status != containerd.Running && status != containerd.Unknown {
-				if err2 := e.client.Delete(ctx, id); err2 != nil && !errdefs.IsNotFound(err2) {
-					logrus.WithError(err2).WithField("plugin", id).Error("Error cleaning up containerd container")
-				}
-				err = e.client.Create(ctx, id, &spec, &opts)
-			}
+	if runtime.GOOS != "darwin" {
+		opts := runctypes.RuncOptions{
+			RuntimeRoot: filepath.Join(e.rootDir, "runtime-root"),
 		}
+		ctx := context.Background()
+		err := e.client.Create(ctx, id, &spec, &opts)
 
 		if err != nil {
-			return errors.Wrap(err, "error creating containerd container")
-		}
-	}
+			status, err2 := e.client.Status(ctx, id)
+			if err2 != nil {
+				if !errdefs.IsNotFound(err2) {
+					logrus.WithError(err2).WithField("id", id).Warn("Received an error while attempting to read plugin status")
+				}
+			} else {
+				if status != containerd.Running && status != containerd.Unknown {
+					if err2 := e.client.Delete(ctx, id); err2 != nil && !errdefs.IsNotFound(err2) {
+						logrus.WithError(err2).WithField("plugin", id).Error("Error cleaning up containerd container")
+					}
+					err = e.client.Create(ctx, id, &spec, &opts)
+				}
+			}
 
-	_, err = e.client.Start(ctx, id, "", false, attachStreamsFunc(stdout, stderr))
-	if err != nil {
-		deleteTaskAndContainer(ctx, e.client, id, nil)
+			if err != nil {
+				return errors.Wrap(err, "error creating containerd container")
+			}
+		}
+
+		_, err = e.client.Start(ctx, id, "", false, attachStreamsFunc(stdout, stderr))
+		if err != nil {
+			deleteTaskAndContainer(ctx, e.client, id, nil)
+		}
+		return err
+	} else {
+		ctx := context.Background()
+		err := e.client.Create(ctx, id, &spec, nil)
+
+		if err != nil {
+			status, err2 := e.client.Status(ctx, id)
+			if err2 != nil {
+				if !errdefs.IsNotFound(err2) {
+					logrus.WithError(err2).WithField("id", id).Warn("Received an error while attempting to read plugin status")
+				}
+			} else {
+				if status != containerd.Running && status != containerd.Unknown {
+					if err2 := e.client.Delete(ctx, id); err2 != nil && !errdefs.IsNotFound(err2) {
+						logrus.WithError(err2).WithField("plugin", id).Error("Error cleaning up containerd container")
+					}
+					err = e.client.Create(ctx, id, &spec, nil)
+				}
+			}
+
+			if err != nil {
+				return errors.Wrap(err, "error creating containerd container")
+			}
+		}
+
+		_, err = e.client.Start(ctx, id, "", false, attachStreamsFunc(stdout, stderr))
+		if err != nil {
+			deleteTaskAndContainer(ctx, e.client, id, nil)
+		}
+		return err
 	}
-	return err
 }
 
 // Restore restores a container

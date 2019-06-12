@@ -1,4 +1,4 @@
-// +build linux freebsd
+// +build linux freebsd darwin
 
 package initlayer // import "github.com/docker/docker/daemon/initlayer"
 

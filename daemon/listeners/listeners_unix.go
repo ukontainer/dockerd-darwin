@@ -1,3 +1,5 @@
+// +build linux darwin
+
 package listeners // import "github.com/docker/docker/daemon/listeners"
 
 import (
