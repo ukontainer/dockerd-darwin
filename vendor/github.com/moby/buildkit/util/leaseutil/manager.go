@@ -37,6 +37,18 @@ type local struct {
 	db *metadata.DB
 }
 
+func (l *local) AddResource(ctx context.Context, lease leases.Lease, r leases.Resource) error {
+	return nil
+}
+
+func (l *local) DeleteResource(ctx context.Context, lease leases.Lease, r leases.Resource) error {
+	return nil
+}
+
+func (l *local) ListResources(ctx context.Context, lease leases.Lease) ([]leases.Resource, error) {
+	return nil, nil
+}
+
 func (l *local) Create(ctx context.Context, opts ...leases.Opt) (leases.Lease, error) {
 	var lease leases.Lease
 	if err := l.db.Update(func(tx *bolt.Tx) error {
