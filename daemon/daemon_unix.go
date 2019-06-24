@@ -906,8 +906,10 @@ func (daemon *Daemon) initNetworkController(config *config.Config, activeSandbox
 
 	// Initialize default network on "host"
 	if n, _ := controller.NetworkByName("host"); n == nil {
-		if _, err := controller.NewNetwork("host", "host", "", libnetwork.NetworkOptionPersist(true)); err != nil {
-			return nil, fmt.Errorf("Error creating default \"host\" network: %v", err)
+		if runtime.GOOS != "darwin" {
+			if _, err := controller.NewNetwork("host", "host", "", libnetwork.NetworkOptionPersist(true)); err != nil {
+				return nil, fmt.Errorf("Error creating default \"host\" network: %v", err)
+			}
 		}
 	}
 
