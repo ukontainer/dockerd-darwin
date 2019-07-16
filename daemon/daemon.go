@@ -486,12 +486,14 @@ func (daemon *Daemon) restore() error {
 			// ignore errors here as this is a best effort to wait for children to be
 			//   running before we try to start the container
 			children := daemon.children(c)
-			timeout := time.After(5 * time.Second)
+			timeout := time.NewTimer(5 * time.Second)
+			defer timeout.Stop()
+
 			for _, child := range children {
 				if notifier, exists := restartContainers[child]; exists {
 					select {
 					case <-notifier:
-					case <-timeout:
+					case <-timeout.C:
 					}
 				}
 			}
@@ -609,6 +611,7 @@ func (daemon *Daemon) waitForNetworks(c *container.Container) {
 	if daemon.discoveryWatcher == nil {
 		return
 	}
+
 	// Make sure if the container has a network that requires discovery that the discovery service is available before starting
 	for netName := range c.NetworkSettings.Networks {
 		// If we get `ErrNoSuchNetwork` here, we can assume that it is due to discovery not being ready
@@ -617,13 +620,19 @@ func (daemon *Daemon) waitForNetworks(c *container.Container) {
 			if _, ok := err.(libnetwork.ErrNoSuchNetwork); !ok {
 				continue
 			}
+
 			// use a longish timeout here due to some slowdowns in libnetwork if the k/v store is on anything other than --net=host
 			// FIXME: why is this slow???
+			dur := 60 * time.Second
+			timer := time.NewTimer(dur)
+
 			logrus.Debugf("Container %s waiting for network to be ready", c.Name)
 			select {
 			case <-daemon.discoveryWatcher.ReadyCh():
-			case <-time.After(60 * time.Second):
+			case <-timer.C:
 			}
+			timer.Stop()
+
 			return
 		}
 	}
@@ -673,10 +682,14 @@ func (daemon *Daemon) DaemonLeavesCluster() {
 	// This is called also on graceful daemon shutdown. We need to
 	// wait, because the ingress release has to happen before the
 	// network controller is stopped.
+
 	if done, err := daemon.ReleaseIngress(); err == nil {
+		timeout := time.NewTimer(5 * time.Second)
+		defer timeout.Stop()
+
 		select {
 		case <-done:
-		case <-time.After(5 * time.Second):
+		case <-timeout.C:
 			logrus.Warn("timeout while waiting for ingress network removal")
 		}
 	} else {
@@ -960,7 +973,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		return nil, err
 	}
 
-	uuid, err := loadOrCreateUUID(filepath.Join(config.Root, "engine_uuid"))
+	trustKey, err := loadOrCreateTrustKey(config.TrustKeyPath)
 	if err != nil {
 		return nil, err
 	}
@@ -1005,7 +1018,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		return nil, errors.New("Devices cgroup isn't mounted")
 	}
 
-	d.ID = uuid
+	d.ID = trustKey.PublicKey().KeyID()
 	d.repository = daemonRepo
 	d.containers = container.NewMemoryStore()
 	if d.containersReplica, err = container.NewViewDB(); err != nil {
@@ -1036,6 +1049,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		MaxConcurrentUploads:      *config.MaxConcurrentUploads,
 		ReferenceStore:            rs,
 		RegistryService:           registryService,
+		TrustKey:                  trustKey,
 	})
 
 	go d.execCommandGC()
@@ -1061,6 +1075,7 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		info.KernelVersion,
 		info.OperatingSystem,
 		info.OSType,
+		info.OSVersion,
 		info.ID,
 	).Set(1)
 	engineCpus.Set(float64(info.NCPU))

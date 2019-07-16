@@ -318,6 +318,7 @@ func newRouterOptions(config *config.Config, d *daemon.Daemon) (routerOptions, e
 		ResolverOpt:         d.NewResolveOptionsFunc(),
 		BuilderConfig:       config.Builder,
 		Rootless:            d.Rootless(),
+		IdentityMapping:     d.IdentityMapping(),
 	})
 	if err != nil {
 		return opts, err
@@ -400,10 +401,14 @@ func shutdownDaemon(d *daemon.Daemon) {
 		logrus.Debug("Clean shutdown succeeded")
 		return
 	}
+
+	timeout := time.NewTimer(time.Duration(shutdownTimeout) * time.Second)
+	defer timeout.Stop()
+
 	select {
 	case <-ch:
 		logrus.Debug("Clean shutdown succeeded")
-	case <-time.After(time.Duration(shutdownTimeout) * time.Second):
+	case <-timeout.C:
 		logrus.Error("Force shutdown daemon")
 	}
 }
@@ -422,6 +427,14 @@ func loadDaemonCliConfig(opts *daemonOptions) (*config.Config, error) {
 		conf.CommonTLSOptions.CAFile = opts.TLSOptions.CAFile
 		conf.CommonTLSOptions.CertFile = opts.TLSOptions.CertFile
 		conf.CommonTLSOptions.KeyFile = opts.TLSOptions.KeyFile
+	}
+
+	if conf.TrustKeyPath == "" {
+		daemonConfDir, err := getDaemonConfDir(conf.Root)
+		if err != nil {
+			return nil, err
+		}
+		conf.TrustKeyPath = filepath.Join(daemonConfDir, defaultTrustKeyFile)
 	}
 
 	if flags.Changed("graph") && flags.Changed("data-root") {

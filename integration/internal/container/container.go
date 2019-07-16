@@ -2,6 +2,7 @@ package container
 
 import (
 	"context"
+	"runtime"
 	"testing"
 
 	"github.com/docker/docker/api/types"
@@ -21,13 +22,16 @@ type TestContainerConfig struct {
 }
 
 // create creates a container with the specified options
-// nolint: golint
-func create(t *testing.T, ctx context.Context, client client.APIClient, ops ...func(*TestContainerConfig)) (container.ContainerCreateCreatedBody, error) { // nolint: golint
+func create(ctx context.Context, t *testing.T, client client.APIClient, ops ...func(*TestContainerConfig)) (container.ContainerCreateCreatedBody, error) {
 	t.Helper()
+	cmd := []string{"top"}
+	if runtime.GOOS == "windows" {
+		cmd = []string{"sleep", "240"}
+	}
 	config := &TestContainerConfig{
 		Config: &container.Config{
 			Image: "busybox",
-			Cmd:   []string{"top"},
+			Cmd:   cmd,
 		},
 		HostConfig:       &container.HostConfig{},
 		NetworkingConfig: &network.NetworkingConfig{},
@@ -41,24 +45,23 @@ func create(t *testing.T, ctx context.Context, client client.APIClient, ops ...f
 }
 
 // Create creates a container with the specified options, asserting that there was no error
-func Create(t *testing.T, ctx context.Context, client client.APIClient, ops ...func(*TestContainerConfig)) string { // nolint: golint
-	c, err := create(t, ctx, client, ops...)
+func Create(ctx context.Context, t *testing.T, client client.APIClient, ops ...func(*TestContainerConfig)) string {
+	c, err := create(ctx, t, client, ops...)
 	assert.NilError(t, err)
 
 	return c.ID
 }
 
 // CreateExpectingErr creates a container, expecting an error with the specified message
-func CreateExpectingErr(t *testing.T, ctx context.Context, client client.APIClient, errMsg string, ops ...func(*TestContainerConfig)) { // nolint: golint
-	_, err := create(t, ctx, client, ops...)
+func CreateExpectingErr(ctx context.Context, t *testing.T, client client.APIClient, errMsg string, ops ...func(*TestContainerConfig)) {
+	_, err := create(ctx, t, client, ops...)
 	assert.ErrorContains(t, err, errMsg)
 }
 
 // Run creates and start a container with the specified options
-// nolint: golint
-func Run(t *testing.T, ctx context.Context, client client.APIClient, ops ...func(*TestContainerConfig)) string { // nolint: golint
+func Run(ctx context.Context, t *testing.T, client client.APIClient, ops ...func(*TestContainerConfig)) string {
 	t.Helper()
-	id := Create(t, ctx, client, ops...)
+	id := Create(ctx, t, client, ops...)
 
 	err := client.ContainerStart(ctx, id, types.ContainerStartOptions{})
 	assert.NilError(t, err)
