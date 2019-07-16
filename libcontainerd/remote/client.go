@@ -198,7 +198,7 @@ func (c *client) Start(ctx context.Context, id, checkpointDir string, withStdin 
 		},
 		func(_ context.Context, _ *containerd.Client, info *containerd.TaskInfo) error {
 			info.Checkpoint = cp
-			if runtime.GOOS != "windows" {
+			if runtime.GOOS != "windows" && runtime.GOOS != "darwin" {
 				info.Options = &runctypes.CreateOptions{
 					IoUid:       uint32(uid),
 					IoGid:       uint32(gid),

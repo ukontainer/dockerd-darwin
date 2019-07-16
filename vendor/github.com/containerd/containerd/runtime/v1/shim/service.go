@@ -127,7 +127,7 @@ func (s *Service) Create(ctx context.Context, r *shimapi.CreateTaskRequest) (_ *
 	rootfs := ""
 	if len(mounts) > 0 {
 		rootfs = filepath.Join(r.Bundle, "rootfs")
-		if err := os.Mkdir(rootfs, 0711); err != nil {
+		if err := os.Mkdir(rootfs, 0711); err != nil && !os.IsExist(err) {
 			return nil, err
 		}
 	}
@@ -554,7 +554,7 @@ func shouldKillAllOnExit(bundlePath string) (bool, error) {
 
 	if bundleSpec.Linux != nil {
 		for _, ns := range bundleSpec.Linux.Namespaces {
-			if ns.Type == specs.PIDNamespace {
+			if ns.Type == specs.PIDNamespace && ns.Path == "" {
 				return false, nil
 			}
 		}

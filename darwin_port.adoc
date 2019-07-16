@@ -1,0 +1,199 @@
+= Docker on darwin
+
+The darwin  port of dockerd requires link:https://github.com/ukontainer/containerd/tree/runu-darwin-master-190607/[ukontainer/containerd], link:https://github.com/ukontainer/runu/[ukontainer/runu] and macOS Mojave 10.14.4 or greater.
+
+[NOTE]
+====
+The current `dockerd-darwin` branch is based off of the `v18.09.0-ce` tag from
+upstream.
+====
+
+
+=== Progress
+
+.Features
+|===
+| Feature | Status
+
+| Image loading
+|
+
+| Container creating
+|
+
+| Container start/stop
+|
+
+| Shared Networking
+|
+
+| Port forwarding
+|
+
+| Volumes
+|
+
+| Links
+|
+
+| Virtual networking
+|
+
+| Limits
+|
+
+|===
+
+.Commands
+|===
+| Command | Status
+
+| attach
+|
+
+| build
+|
+
+| commit
+|
+
+| cp
+|
+
+| create
+| :white_check_mark:
+
+| diff
+|
+
+| events
+|
+
+| exec
+|
+
+| export
+|
+
+| history
+|
+
+| images
+|
+
+| import
+|
+
+| info
+| :white_check_mark:
+
+| inspect
+|
+
+| kill
+|
+
+| load
+|
+
+| login
+| :white_check_mark:
+
+| logout
+| :white_check_mark:
+
+| logs
+|
+
+| pause
+|
+
+| port
+|
+
+| ps
+|
+
+| pull
+| :white_check_mark:
+
+| push
+|
+
+| rename
+|
+
+| restart
+|
+
+| rm
+|
+
+| rmi
+|
+
+| run
+|
+
+| save
+|
+
+| search
+|
+
+| start
+|
+
+| stats
+|
+
+| stop
+|
+
+| tag
+|
+
+| top
+|
+
+| unpause
+|
+
+| version
+| :white_check_mark:
+
+| wait
+|
+
+|===
+
+== Hacking
+
+
+[source,bash]
+----
+gnumake -f Makefile.darwin
+----
+
+This should create the `containerd` and `dockerd` executables in
+containerd binaries in `./bundle/bin.` and `./bundles/latest/` respectively.
+
+[source,bash]
+----
+gnumake -f Makefile.darwin dockerCli
+----
+
+This should create a docker client executable binary into `/usr/local/bin`.
+
+[source,bash]
+----
+gnumake -f Makefile.darwin runu
+----
+
+This should create a runu executable binary into `/usr/local/bin`.
+
+=== References
+
+Below are a list of useful references for understanding both Docker, dockerd, containerd and runu.
+
+* link:https://blog.docker.com/2017/08/what-is-containerd-runtime/[What is containerd].

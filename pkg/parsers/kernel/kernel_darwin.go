@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/mattn/go-shellwords"
+	"github.com/sirupsen/logrus"
 )
 
 // GetKernelVersion gets the current kernel version.
@@ -53,4 +54,17 @@ func getRelease() (string, error) {
 	}
 
 	return release, nil
+}
+
+// CheckKernelVersion checks if current kernel is newer than (or equal to)
+// the given version.
+func CheckKernelVersion(k, major, minor int) bool {
+	if v, err := GetKernelVersion(); err != nil {
+		logrus.Warnf("error getting kernel version: %s", err)
+	} else {
+		if CompareKernelVersion(*v, VersionInfo{Kernel: k, Major: major, Minor: minor}) < 0 {
+			return false
+		}
+	}
+	return true
 }

@@ -2,11 +2,24 @@
 
 package netlink
 
+import "net"
+
 // ConntrackTableType Conntrack table for the netlink operation
 type ConntrackTableType uint8
 
+// Filter types
+type ConntrackFilterType uint8
+
 // InetFamily Family type
 type InetFamily uint8
+
+const (
+	ConntrackOrigSrcIP = iota // -orig-src ip   Source address from original direction
+	ConntrackOrigDstIP        // -orig-dst ip   Destination address from original direction
+	ConntrackNatSrcIP         // -src-nat ip    Source NAT ip
+	ConntrackNatDstIP         // -dst-nat ip    Destination NAT ip
+	ConntrackNatAnyIP         // -any-nat ip    Source or destination NAT ip
+)
 
 // ConntrackFlow placeholder
 type ConntrackFlow struct{}
@@ -50,4 +63,9 @@ func (h *Handle) ConntrackTableFlush(table ConntrackTableType) error {
 // conntrack -D [table] parameters         Delete conntrack or expectation
 func (h *Handle) ConntrackDeleteFilter(table ConntrackTableType, family InetFamily, filter *ConntrackFilter) (uint, error) {
 	return 0, ErrNotImplemented
+}
+
+// AddIP adds an IP to the conntrack filter
+func (f *ConntrackFilter) AddIP(tp ConntrackFilterType, ip net.IP) error {
+	return nil
 }

@@ -65,7 +65,7 @@ func setupBridgeIPv6(config *networkConfiguration, i *bridgeInterface) error {
 	// Setting route to global IPv6 subnet
 	logrus.Debugf("Adding route to IPv6 network %s via device %s", config.AddressIPv6.String(), config.BridgeName)
 	err = i.nlh.RouteAdd(&netlink.Route{
-		Scope:     netlink.SCOPE_UNIVERSE,
+		Scope:     0, //netlink.SCOPE_UNIVERSE
 		LinkIndex: i.Link.Attrs().Index,
 		Dst:       config.AddressIPv6,
 	})

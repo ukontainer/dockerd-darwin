@@ -1,0 +1,21 @@
+# This file exists to support the non-Docker-based build requirements for
+# Docker darwin
+#
+# Hacking GOPATH to take the first directory in the list and use that to clone
+# our dependencies
+
+export GO_PATH=$(firstword $(subst :, ,$(GOPATH)))
+export AUTO_GO_PATH=1
+export DEST_DIR=$(PWD)/bundles/bin
+
+all: binary
+
+binary: $(DEST_DIR)/docker-containerd
+	./hack/make.sh dynbinary 
+
+prepare: bundles/bin
+
+bundles/bin:
+	mkdir -p bundles/bin
+
+.PHONY: prepare all binary

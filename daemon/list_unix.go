@@ -1,4 +1,4 @@
-// +build linux freebsd
+// +build linux freebsd darwin
 
 package daemon // import "github.com/docker/docker/daemon"
 
