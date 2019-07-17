@@ -12,6 +12,6 @@ func (n *NexthopInfo) ListFlags() []string {
 
 // RouteAdd will add a route to the system.
 // Equivalent to: `ip route add $route`
-func (h *Handle) RouteAdd(route *Route) error {
-	return nil
-}
+// func (h *Handle) RouteAdd(route *Route) error {
+// 	return nil
+// }

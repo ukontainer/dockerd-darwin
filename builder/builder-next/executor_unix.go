@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/docker/docker/daemon"
+	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/libnetwork"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/runcexecutor"
