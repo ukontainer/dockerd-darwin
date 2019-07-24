@@ -16,13 +16,13 @@ upstream.
 | Feature | Status
 
 | Image loading
-|
+| :construction:
 
 | Container creating
-|
+| :white_check_mark:
 
 | Container start/stop
-|
+| :white_check_mark:
 
 | Shared Networking
 |
@@ -79,7 +79,7 @@ upstream.
 |
 
 | images
-|
+| :white_check_mark:
 
 | import
 |
@@ -127,13 +127,13 @@ upstream.
 |
 
 | rm
-|
+| :white_check_mark:
 
 | rmi
-|
+| :white_check_mark:
 
 | run
-|
+| :white_check_mark:
 
 | save
 |
@@ -169,28 +169,12 @@ upstream.
 
 == Hacking
 
-
 [source,bash]
 ----
-gnumake -f Makefile.darwin
+make -f Makefile.darwin
 ----
 
-This should create the `containerd` and `dockerd` executables in
-containerd binaries in `./bundle/bin.` and `./bundles/latest/` respectively.
-
-[source,bash]
-----
-gnumake -f Makefile.darwin dockerCli
-----
-
-This should create a docker client executable binary into `/usr/local/bin`.
-
-[source,bash]
-----
-gnumake -f Makefile.darwin runu
-----
-
-This should create a runu executable binary into `/usr/local/bin`.
+This should create the `dockerd` executables in `./bundles/latest/dynbinary`
 
 === References
 
