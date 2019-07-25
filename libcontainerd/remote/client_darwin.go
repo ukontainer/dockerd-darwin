@@ -15,7 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const runtimeName = "io.containerd.v1.darwin"
+const runtimeName = "io.containerd.runtime.v1.linux"
 
 func summaryFromInterface(i interface{}) (*libcontainerdtypes.Summary, error) {
 	return &libcontainerdtypes.Summary{}, nil
