@@ -25,22 +25,22 @@ upstream.
 | :white_check_mark:
 
 | Shared Networking
-|
+| :x:	
 
 | Port forwarding
-|
+| :x:	
 
 | Volumes
-|
+| :x:	
 
 | Links
-|
+| :x:	
 
 | Virtual networking
-|
+| :x:	
 
 | Limits
-|
+| :x:	
 
 |===
 
@@ -49,52 +49,52 @@ upstream.
 | Command | Status
 
 | attach
-|
+| :x:	
 
 | build
-|
+| :x:	
 
 | commit
-|
+| :white_check_mark:
 
 | cp
-|
+| :white_check_mark:
 
 | create
 | :white_check_mark:
 
 | diff
-|
+| :white_check_mark:
 
 | events
-|
+| :x:	
 
 | exec
-|
+| :x:	
 
 | export
-|
+| :white_check_mark:
 
 | history
-|
+| :white_check_mark:
 
 | images
 | :white_check_mark:
 
 | import
-|
+| :white_check_mark:
 
 | info
 | :white_check_mark:
 
 | inspect
-|
+| :white_check_mark:
 
 | kill
-|
+| :x:	
 
 | load
-|
+| :white_check_mark:
 
 | login
 | :white_check_mark:
@@ -103,28 +103,28 @@ upstream.
 | :white_check_mark:
 
 | logs
-|
+| :white_check_mark:
 
 | pause
-|
+| :x:	
 
 | port
-|
+| :white_check_mark:
 
 | ps
-|
+| :white_check_mark:
 
 | pull
 | :white_check_mark:
 
 | push
-|
+| :white_check_mark:
 
 | rename
-|
+| :white_check_mark:
 
 | restart
-|
+| :x:	
 
 | rm
 | :white_check_mark:
@@ -136,34 +136,34 @@ upstream.
 | :white_check_mark:
 
 | save
-|
+| :white_check_mark:
 
 | search
-|
+| :white_check_mark:
 
 | start
-|
+| :x:	
 
 | stats
-|
+| :white_check_mark:
 
 | stop
-|
+| :x:	
 
 | tag
-|
+| :white_check_mark:
 
 | top
-|
+| :x:	
 
 | unpause
-|
+| :x:	
 
 | version
 | :white_check_mark:
 
 | wait
-|
+| :white_check_mark:
 
 |===
 
