@@ -49,7 +49,7 @@ upstream.
 | Command | Status
 
 | attach
-| :x:	
+| :white_check_mark:
 
 | build
 | :x:	
@@ -91,7 +91,7 @@ upstream.
 | :white_check_mark:
 
 | kill
-| :x:	
+| :white_check_mark:
 
 | load
 | :white_check_mark:
@@ -148,7 +148,7 @@ upstream.
 | :white_check_mark:
 
 | stop
-| :x:	
+| :white_check_mark:
 
 | tag
 | :white_check_mark:
