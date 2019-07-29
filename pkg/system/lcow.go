@@ -16,6 +16,9 @@ func IsOSSupported(os string) bool {
 	if LCOWSupported() && strings.EqualFold(os, "linux") {
 		return true
 	}
+	if runtime.GOOS == "darwin" && strings.EqualFold(os, "linux") {
+		return true
+	}
 	return false
 }
 

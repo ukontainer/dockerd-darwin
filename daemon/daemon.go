@@ -868,6 +868,9 @@ func NewDaemon(ctx context.Context, config *config.Config, pluginStore *plugin.S
 		}
 		d.graphDrivers[runtime.GOOS] = driverName // May still be empty. Layerstore init determines instead.
 	}
+	if runtime.GOOS == "darwin" {
+		d.graphDrivers["linux"] = ""
+	}
 
 	d.RegistryService = registryService
 	logger.RegisterPluginGetter(d.PluginStore)
