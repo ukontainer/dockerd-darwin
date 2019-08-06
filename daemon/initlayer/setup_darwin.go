@@ -1,4 +1,4 @@
-// +build linux freebsd
+// +build linux freebsd darwin
 
 package initlayer // import "github.com/docker/docker/daemon/initlayer"
 
@@ -22,15 +22,12 @@ func Setup(initLayerFs containerfs.ContainerFS, rootIdentity idtools.Identity) e
 	initLayer := initLayerFs.Path()
 
 	for pth, typ := range map[string]string{
-		"/dev/pts":         "dir",
-		"/dev/shm":         "dir",
 		"/proc":            "dir",
 		"/sys":             "dir",
 		"/.dockerenv":      "file",
 		"/etc/resolv.conf": "file",
 		"/etc/hosts":       "file",
 		"/etc/hostname":    "file",
-		"/dev/console":     "file",
 		"/etc/mtab":        "/proc/mounts",
 	} {
 		parts := strings.Split(pth, "/")
