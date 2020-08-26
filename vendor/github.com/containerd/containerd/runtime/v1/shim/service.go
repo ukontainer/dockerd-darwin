@@ -85,7 +85,7 @@ func NewService(config Config, publisher events.Publisher) (*Service, error) {
 	s := &Service{
 		config:    config,
 		context:   ctx,
-		processes: make(map[string]process.Process),
+		Processes: make(map[string]process.Process),
 		events:    make(chan interface{}, 128),
 		ec:        reaper.Default.Subscribe(),
 	}
@@ -103,7 +103,7 @@ type Service struct {
 
 	config    Config
 	context   context.Context
-	processes map[string]process.Process
+	Processes map[string]process.Process
 	events    chan interface{}
 	platform  stdio.Platform
 	ec        chan runc.Exit
@@ -189,7 +189,7 @@ func (s *Service) Create(ctx context.Context, r *shimapi.CreateTaskRequest) (_ *
 	s.id = r.ID
 	s.bundle = r.Bundle
 	pid := process.Pid()
-	s.processes[r.ID] = process
+	s.Processes[r.ID] = process
 	return &shimapi.CreateTaskResponse{
 		Pid: uint32(pid),
 	}, nil
@@ -220,7 +220,7 @@ func (s *Service) Delete(ctx context.Context, r *ptypes.Empty) (*shimapi.DeleteR
 		return nil, errdefs.ToGRPC(err)
 	}
 	s.mu.Lock()
-	delete(s.processes, s.id)
+	delete(s.Processes, s.id)
 	s.mu.Unlock()
 	s.platform.Close()
 	return &shimapi.DeleteResponse{
@@ -243,7 +243,7 @@ func (s *Service) DeleteProcess(ctx context.Context, r *shimapi.DeleteProcessReq
 		return nil, errdefs.ToGRPC(err)
 	}
 	s.mu.Lock()
-	delete(s.processes, r.ID)
+	delete(s.Processes, r.ID)
 	s.mu.Unlock()
 	return &shimapi.DeleteResponse{
 		ExitStatus: uint32(p.ExitStatus()),
@@ -256,12 +256,12 @@ func (s *Service) DeleteProcess(ctx context.Context, r *shimapi.DeleteProcessReq
 func (s *Service) Exec(ctx context.Context, r *shimapi.ExecProcessRequest) (*ptypes.Empty, error) {
 	s.mu.Lock()
 
-	if p := s.processes[r.ID]; p != nil {
+	if p := s.Processes[r.ID]; p != nil {
 		s.mu.Unlock()
 		return nil, errdefs.ToGRPCf(errdefs.ErrAlreadyExists, "id %s", r.ID)
 	}
 
-	p := s.processes[s.id]
+	p := s.Processes[s.id]
 	s.mu.Unlock()
 	if p == nil {
 		return nil, errdefs.ToGRPCf(errdefs.ErrFailedPrecondition, "container must be created")
@@ -279,7 +279,7 @@ func (s *Service) Exec(ctx context.Context, r *shimapi.ExecProcessRequest) (*pty
 		return nil, errdefs.ToGRPC(err)
 	}
 	s.mu.Lock()
-	s.processes[r.ID] = process
+	s.Processes[r.ID] = process
 	s.mu.Unlock()
 	return empty, nil
 }
@@ -294,7 +294,7 @@ func (s *Service) ResizePty(ctx context.Context, r *shimapi.ResizePtyRequest) (*
 		Height: uint16(r.Height),
 	}
 	s.mu.Lock()
-	p := s.processes[r.ID]
+	p := s.Processes[r.ID]
 	s.mu.Unlock()
 	if p == nil {
 		return nil, errors.Errorf("process does not exist %s", r.ID)
@@ -401,7 +401,7 @@ func (s *Service) ListPids(ctx context.Context, r *shimapi.ListPidsRequest) (*sh
 		pInfo := task.ProcessInfo{
 			Pid: pid,
 		}
-		for _, p := range s.processes {
+		for _, p := range s.Processes {
 			if p.Pid() == int(pid) {
 				d := &runctypes.ProcessDetails{
 					ExecID: p.ID(),
@@ -506,7 +506,7 @@ func (s *Service) processExits() {
 func (s *Service) checkProcesses(e runc.Exit) {
 	var p process.Process
 	s.mu.Lock()
-	for _, proc := range s.processes {
+	for _, proc := range s.Processes {
 		if proc.Pid() == e.Pid {
 			p = proc
 			break
@@ -588,7 +588,7 @@ func (s *Service) getInitProcess() (process.Process, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	p := s.processes[s.id]
+	p := s.Processes[s.id]
 	if p == nil {
 		return nil, errdefs.ToGRPCf(errdefs.ErrFailedPrecondition, "container must be created")
 	}
@@ -600,7 +600,7 @@ func (s *Service) getExecProcess(id string) (process.Process, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	p := s.processes[id]
+	p := s.Processes[id]
 	if p == nil {
 		return nil, errdefs.ToGRPCf(errdefs.ErrNotFound, "process %s does not exist", id)
 	}

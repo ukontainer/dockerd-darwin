@@ -1,5 +1,3 @@
-// +build !windows
-
 /*
    Copyright The containerd Authors.
 
@@ -16,24 +14,20 @@
    limitations under the License.
 */
 
-package platforms
+package sys
 
 import (
-	"runtime"
-	specs "github.com/opencontainers/image-spec/specs-go/v1"
 )
 
-// Default returns the default matcher for the platform.
-func Default() MatchComparer {
-	return Only(DefaultSpec())
+// OOMScoreMaxKillable is the maximum score keeping the process killable by the oom killer
+const OOMScoreMaxKillable = -999
+
+// SetOOMScore sets the oom score for the provided pid
+func SetOOMScore(pid, score int) error {
+	return nil
 }
 
-func DefaultLinux() MatchComparer {
-	platform := specs.Platform{
-		OS:           "linux",
-		Architecture: runtime.GOARCH,
-		// The Variant field will be empty if arch != ARM.
-		Variant: cpuVariant,
-	}
-	return Only(platform)
+// GetOOMScoreAdj gets the oom score for a process
+func GetOOMScoreAdj(pid int) (int, error) {
+	return 0, nil
 }

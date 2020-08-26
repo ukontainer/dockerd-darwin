@@ -22,6 +22,7 @@ import (
 	"github.com/containerd/containerd/containers"
 	"github.com/containerd/containerd/errdefs"
 	"github.com/containerd/containerd/oci"
+	"github.com/containerd/containerd/platforms"
 	"github.com/containerd/containerd/snapshots"
 	"github.com/containerd/typeurl"
 	"github.com/gogo/protobuf/types"
@@ -147,7 +148,10 @@ func WithNewSnapshot(id string, i Image, opts ...snapshots.Opt) NewContainerOpts
 	return func(ctx context.Context, client *Client, c *containers.Container) error {
 		diffIDs, err := i.RootFS(ctx)
 		if err != nil {
-			return err
+			diffIDs, err = i.(*image).i.RootFS(ctx, client.ContentStore(), platforms.DefaultLinux())
+			if err != nil {
+				return err
+			}
 		}
 
 		parent := identity.ChainID(diffIDs).String()
