@@ -1,0 +1,183 @@
+= Docker on darwin
+
+The darwin  port of dockerd requires link:https://github.com/ukontainer/containerd/tree/runu-darwin-master-190607/[ukontainer/containerd], link:https://github.com/ukontainer/runu/[ukontainer/runu] and macOS Mojave 10.14.4 or greater.
+
+[NOTE]
+====
+The current `dockerd-darwin` branch is based off of the `v18.09.0-ce` tag from
+upstream.
+====
+
+
+=== Progress
+
+.Features
+|===
+| Feature | Status
+
+| Image loading
+| :construction:
+
+| Container creating
+| :white_check_mark:
+
+| Container start/stop
+| :white_check_mark:
+
+| Shared Networking
+| :x:	
+
+| Port forwarding
+| :x:	
+
+| Volumes
+| :x:	
+
+| Links
+| :x:	
+
+| Virtual networking
+| :x:	
+
+| Limits
+| :x:	
+
+|===
+
+.Commands
+|===
+| Command | Status
+
+| attach
+| :white_check_mark:
+
+| build
+| :x:	
+
+| commit
+| :white_check_mark:
+
+| cp
+| :white_check_mark:
+
+| create
+| :white_check_mark:
+
+| diff
+| :white_check_mark:
+
+| events
+| :x:	
+
+| exec
+| :x:	
+
+| export
+| :white_check_mark:
+
+| history
+| :white_check_mark:
+
+| images
+| :white_check_mark:
+
+| import
+| :white_check_mark:
+
+| info
+| :white_check_mark:
+
+| inspect
+| :white_check_mark:
+
+| kill
+| :white_check_mark:
+
+| load
+| :white_check_mark:
+
+| login
+| :white_check_mark:
+
+| logout
+| :white_check_mark:
+
+| logs
+| :white_check_mark:
+
+| pause
+| :x:	
+
+| port
+| :white_check_mark:
+
+| ps
+| :white_check_mark:
+
+| pull
+| :white_check_mark:
+
+| push
+| :white_check_mark:
+
+| rename
+| :white_check_mark:
+
+| restart
+| :x:	
+
+| rm
+| :white_check_mark:
+
+| rmi
+| :white_check_mark:
+
+| run
+| :white_check_mark:
+
+| save
+| :white_check_mark:
+
+| search
+| :white_check_mark:
+
+| start
+| :x:	
+
+| stats
+| :white_check_mark:
+
+| stop
+| :white_check_mark:
+
+| tag
+| :white_check_mark:
+
+| top
+| :x:	
+
+| unpause
+| :x:	
+
+| version
+| :white_check_mark:
+
+| wait
+| :white_check_mark:
+
+|===
+
+== Hacking
+
+[source,bash]
+----
+make -f Makefile.darwin
+----
+
+This should create the `dockerd` executables in `./bundles/latest/dynbinary`
+
+=== References
+
+Below are a list of useful references for understanding both Docker, dockerd, containerd and runu.
+
+* link:https://blog.docker.com/2017/08/what-is-containerd-runtime/[What is containerd].

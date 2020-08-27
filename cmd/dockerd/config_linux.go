@@ -1,5 +1,3 @@
-// +build freebsd darwin
-
 package main
 
 import (
@@ -64,5 +62,10 @@ func installConfigFlags(conf *config.Config, flags *pflag.FlagSet) error {
 	// rootless needs to be explicitly specified for running "rootful" dockerd in rootless dockerd (#38702)
 	// Note that defaultUserlandProxyPath and honorXDG are configured according to the value of rootless.RunningWithRootlessKit, not the value of --rootless.
 	flags.BoolVar(&conf.Rootless, "rootless", rootless.RunningWithRootlessKit(), "Enable rootless mode; typically used with RootlessKit")
+	defaultCgroupNamespaceMode := "host"
+	if cgroups.IsCgroup2UnifiedMode() {
+		defaultCgroupNamespaceMode = "private"
+	}
+	flags.StringVar(&conf.CgroupNamespaceMode, "default-cgroupns-mode", defaultCgroupNamespaceMode, `Default mode for containers cgroup namespace ("host" | "private")`)
 	return nil
 }

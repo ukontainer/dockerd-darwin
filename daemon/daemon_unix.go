@@ -1,10 +1,9 @@
-// +build linux freebsd
+// +build linux freebsd darwin
 
 package daemon // import "github.com/docker/docker/daemon"
 
 import (
 	"bufio"
-	"context"
 	"fmt"
 	"io/ioutil"
 	"net"
@@ -17,7 +16,6 @@ import (
 	"time"
 
 	statsV1 "github.com/containerd/cgroups/stats/v1"
-	statsV2 "github.com/containerd/cgroups/v2/stats"
 	"github.com/containerd/containerd/sys"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/blkiodev"
@@ -29,6 +27,7 @@ import (
 	"github.com/docker/docker/errdefs"
 	"github.com/docker/docker/opts"
 	"github.com/docker/docker/pkg/containerfs"
+	"github.com/docker/docker/pkg/fileutils"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/parsers"
 	"github.com/docker/docker/pkg/parsers/kernel"
@@ -37,18 +36,13 @@ import (
 	volumemounts "github.com/docker/docker/volume/mounts"
 	"github.com/docker/libnetwork"
 	nwconfig "github.com/docker/libnetwork/config"
-	"github.com/docker/libnetwork/drivers/bridge"
 	"github.com/docker/libnetwork/netlabel"
-	"github.com/docker/libnetwork/netutils"
 	"github.com/docker/libnetwork/options"
-	lntypes "github.com/docker/libnetwork/types"
 	"github.com/moby/sys/mount"
-	"github.com/opencontainers/runc/libcontainer/cgroups"
 	specs "github.com/opencontainers/runtime-spec/specs-go"
 	"github.com/opencontainers/selinux/go-selinux/label"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
-	"github.com/vishvananda/netlink"
 	"golang.org/x/sys/unix"
 )
 
@@ -81,6 +75,25 @@ const (
 
 type containerGetter interface {
 	GetContainer(string) (*container.Container, error)
+}
+
+func getPluginExecRoot(root string) string {
+	return filepath.Join(root, "plugins")
+}
+
+func getRealPath(path string) (string, error) {
+	return fileutils.ReadSymlinkedDirectory(path)
+}
+
+func (daemon *Daemon) cleanupMountsByID(in string) error {
+	return nil
+}
+
+func (daemon *Daemon) cleanupMounts() error {
+	return nil
+}
+
+func setupResolvConf(config *config.Config) {
 }
 
 func getMemoryResources(config containertypes.Resources) *specs.LinuxMemory {
@@ -358,24 +371,6 @@ func (daemon *Daemon) adaptContainerSettings(hostConfig *containertypes.HostConf
 		hostConfig.IpcMode = containertypes.IpcMode(m)
 	}
 
-	// Set default cgroup namespace mode, if unset for container
-	if hostConfig.CgroupnsMode.IsEmpty() {
-		// for cgroup v2: unshare cgroupns even for privileged containers
-		// https://github.com/containers/libpod/pull/4374#issuecomment-549776387
-		if hostConfig.Privileged && !cgroups.IsCgroup2UnifiedMode() {
-			hostConfig.CgroupnsMode = containertypes.CgroupnsMode("host")
-		} else {
-			m := "host"
-			if cgroups.IsCgroup2UnifiedMode() {
-				m = "private"
-			}
-			if daemon.configStore != nil {
-				m = daemon.configStore.CgroupNamespaceMode
-			}
-			hostConfig.CgroupnsMode = containertypes.CgroupnsMode(m)
-		}
-	}
-
 	adaptSharedNamespaceContainer(daemon, hostConfig)
 
 	var err error
@@ -636,10 +631,6 @@ func UsingSystemd(config *config.Config) bool {
 	if getCD(config) == cgroupSystemdDriver {
 		return true
 	}
-	// On cgroup v2 hosts, default to systemd driver
-	if getCD(config) == "" && cgroups.IsCgroup2UnifiedMode() && IsRunningSystemd() {
-		return true
-	}
 	return false
 }
 
@@ -758,10 +749,6 @@ func verifyDaemonSettings(conf *config.Config) error {
 		}
 	}
 
-	if conf.Rootless && UsingSystemd(conf) && !cgroups.IsCgroup2UnifiedMode() {
-		return fmt.Errorf("exec-opt native.cgroupdriver=systemd requires cgroup v2 for rootless mode")
-	}
-
 	configureRuntimes(conf)
 	if rtName := conf.GetDefaultRuntimeName(); rtName != "" {
 		if conf.GetRuntime(rtName) == nil {
@@ -867,8 +854,10 @@ func (daemon *Daemon) initNetworkController(config *config.Config, activeSandbox
 
 	// Initialize default network on "host"
 	if n, _ := controller.NetworkByName("host"); n == nil {
-		if _, err := controller.NewNetwork("host", "host", "", libnetwork.NetworkOptionPersist(true)); err != nil {
-			return nil, fmt.Errorf("Error creating default \"host\" network: %v", err)
+		if runtime.GOOS != "darwin" {
+			if _, err := controller.NewNetwork("host", "host", "", libnetwork.NetworkOptionPersist(true)); err != nil {
+				return nil, fmt.Errorf("Error creating default \"host\" network: %v", err)
+			}
 		}
 	}
 
@@ -918,147 +907,6 @@ func driverOptions(config *config.Config) []nwconfig.Option {
 	dOptions := []nwconfig.Option{}
 	dOptions = append(dOptions, nwconfig.OptionDriverConfig("bridge", bridgeOption))
 	return dOptions
-}
-
-func initBridgeDriver(controller libnetwork.NetworkController, config *config.Config) error {
-	bridgeName := bridge.DefaultBridgeName
-	if config.BridgeConfig.Iface != "" {
-		bridgeName = config.BridgeConfig.Iface
-	}
-	netOption := map[string]string{
-		bridge.BridgeName:         bridgeName,
-		bridge.DefaultBridge:      strconv.FormatBool(true),
-		netlabel.DriverMTU:        strconv.Itoa(config.Mtu),
-		bridge.EnableIPMasquerade: strconv.FormatBool(config.BridgeConfig.EnableIPMasq),
-		bridge.EnableICC:          strconv.FormatBool(config.BridgeConfig.InterContainerCommunication),
-	}
-
-	// --ip processing
-	if config.BridgeConfig.DefaultIP != nil {
-		netOption[bridge.DefaultBindingIP] = config.BridgeConfig.DefaultIP.String()
-	}
-
-	ipamV4Conf := &libnetwork.IpamConf{AuxAddresses: make(map[string]string)}
-
-	nwList, nw6List, err := netutils.ElectInterfaceAddresses(bridgeName)
-	if err != nil {
-		return errors.Wrap(err, "list bridge addresses failed")
-	}
-
-	nw := nwList[0]
-	if len(nwList) > 1 && config.BridgeConfig.FixedCIDR != "" {
-		_, fCIDR, err := net.ParseCIDR(config.BridgeConfig.FixedCIDR)
-		if err != nil {
-			return errors.Wrap(err, "parse CIDR failed")
-		}
-		// Iterate through in case there are multiple addresses for the bridge
-		for _, entry := range nwList {
-			if fCIDR.Contains(entry.IP) {
-				nw = entry
-				break
-			}
-		}
-	}
-
-	ipamV4Conf.PreferredPool = lntypes.GetIPNetCanonical(nw).String()
-	hip, _ := lntypes.GetHostPartIP(nw.IP, nw.Mask)
-	if hip.IsGlobalUnicast() {
-		ipamV4Conf.Gateway = nw.IP.String()
-	}
-
-	if config.BridgeConfig.IP != "" {
-		ip, ipNet, err := net.ParseCIDR(config.BridgeConfig.IP)
-		if err != nil {
-			return err
-		}
-		ipamV4Conf.PreferredPool = ipNet.String()
-		ipamV4Conf.Gateway = ip.String()
-	} else if bridgeName == bridge.DefaultBridgeName && ipamV4Conf.PreferredPool != "" {
-		logrus.Infof("Default bridge (%s) is assigned with an IP address %s. Daemon option --bip can be used to set a preferred IP address", bridgeName, ipamV4Conf.PreferredPool)
-	}
-
-	if config.BridgeConfig.FixedCIDR != "" {
-		_, fCIDR, err := net.ParseCIDR(config.BridgeConfig.FixedCIDR)
-		if err != nil {
-			return err
-		}
-
-		ipamV4Conf.SubPool = fCIDR.String()
-	}
-
-	if config.BridgeConfig.DefaultGatewayIPv4 != nil {
-		ipamV4Conf.AuxAddresses["DefaultGatewayIPv4"] = config.BridgeConfig.DefaultGatewayIPv4.String()
-	}
-
-	var (
-		deferIPv6Alloc bool
-		ipamV6Conf     *libnetwork.IpamConf
-	)
-
-	if config.BridgeConfig.EnableIPv6 && config.BridgeConfig.FixedCIDRv6 == "" {
-		return errdefs.InvalidParameter(errors.New("IPv6 is enabled for the default bridge, but no subnet is configured. Specify an IPv6 subnet using --fixed-cidr-v6"))
-	} else if config.BridgeConfig.FixedCIDRv6 != "" {
-		_, fCIDRv6, err := net.ParseCIDR(config.BridgeConfig.FixedCIDRv6)
-		if err != nil {
-			return err
-		}
-
-		// In case user has specified the daemon flag --fixed-cidr-v6 and the passed network has
-		// at least 48 host bits, we need to guarantee the current behavior where the containers'
-		// IPv6 addresses will be constructed based on the containers' interface MAC address.
-		// We do so by telling libnetwork to defer the IPv6 address allocation for the endpoints
-		// on this network until after the driver has created the endpoint and returned the
-		// constructed address. Libnetwork will then reserve this address with the ipam driver.
-		ones, _ := fCIDRv6.Mask.Size()
-		deferIPv6Alloc = ones <= 80
-
-		ipamV6Conf = &libnetwork.IpamConf{
-			AuxAddresses:  make(map[string]string),
-			PreferredPool: fCIDRv6.String(),
-		}
-
-		// In case the --fixed-cidr-v6 is specified and the current docker0 bridge IPv6
-		// address belongs to the same network, we need to inform libnetwork about it, so
-		// that it can be reserved with IPAM and it will not be given away to somebody else
-		for _, nw6 := range nw6List {
-			if fCIDRv6.Contains(nw6.IP) {
-				ipamV6Conf.Gateway = nw6.IP.String()
-				break
-			}
-		}
-	}
-
-	if config.BridgeConfig.DefaultGatewayIPv6 != nil {
-		if ipamV6Conf == nil {
-			ipamV6Conf = &libnetwork.IpamConf{AuxAddresses: make(map[string]string)}
-		}
-		ipamV6Conf.AuxAddresses["DefaultGatewayIPv6"] = config.BridgeConfig.DefaultGatewayIPv6.String()
-	}
-
-	v4Conf := []*libnetwork.IpamConf{ipamV4Conf}
-	v6Conf := []*libnetwork.IpamConf{}
-	if ipamV6Conf != nil {
-		v6Conf = append(v6Conf, ipamV6Conf)
-	}
-	// Initialize default network on "bridge" with the same name
-	_, err = controller.NewNetwork("bridge", "bridge", "",
-		libnetwork.NetworkOptionEnableIPv6(config.BridgeConfig.EnableIPv6),
-		libnetwork.NetworkOptionDriverOpts(netOption),
-		libnetwork.NetworkOptionIpam("default", "", v4Conf, v6Conf, nil),
-		libnetwork.NetworkOptionDeferIPv6Alloc(deferIPv6Alloc))
-	if err != nil {
-		return fmt.Errorf("Error creating default \"bridge\" network: %v", err)
-	}
-	return nil
-}
-
-// Remove default bridge interface if present (--bridge=none use case)
-func removeDefaultBridgeInterface() {
-	if lnk, err := netlink.LinkByName(bridge.DefaultBridgeName); err == nil {
-		if err := netlink.LinkDel(lnk); err != nil {
-			logrus.Warnf("Failed to remove bridge interface (%s): %v", bridge.DefaultBridgeName, err)
-		}
-	}
 }
 
 func setupInitLayer(idMapping *idtools.IdentityMapping) func(containerfs.ContainerFS) error {
@@ -1368,241 +1216,9 @@ func copyBlkioEntry(entries []*statsV1.BlkIOEntry) []types.BlkioStatEntry {
 	return out
 }
 
-func (daemon *Daemon) stats(c *container.Container) (*types.StatsJSON, error) {
-	if !c.IsRunning() {
-		return nil, errNotRunning(c.ID)
-	}
-	cs, err := daemon.containerd.Stats(context.Background(), c.ID)
-	if err != nil {
-		if strings.Contains(err.Error(), "container not found") {
-			return nil, containerNotFound(c.ID)
-		}
-		return nil, err
-	}
-	s := &types.StatsJSON{}
-	s.Read = cs.Read
-	stats := cs.Metrics
-	switch t := stats.(type) {
-	case *statsV1.Metrics:
-		return daemon.statsV1(s, t)
-	case *statsV2.Metrics:
-		return daemon.statsV2(s, t)
-	default:
-		return nil, errors.Errorf("unexpected type of metrics %+v", t)
-	}
-}
-
-func (daemon *Daemon) statsV1(s *types.StatsJSON, stats *statsV1.Metrics) (*types.StatsJSON, error) {
-	if stats.Blkio != nil {
-		s.BlkioStats = types.BlkioStats{
-			IoServiceBytesRecursive: copyBlkioEntry(stats.Blkio.IoServiceBytesRecursive),
-			IoServicedRecursive:     copyBlkioEntry(stats.Blkio.IoServicedRecursive),
-			IoQueuedRecursive:       copyBlkioEntry(stats.Blkio.IoQueuedRecursive),
-			IoServiceTimeRecursive:  copyBlkioEntry(stats.Blkio.IoServiceTimeRecursive),
-			IoWaitTimeRecursive:     copyBlkioEntry(stats.Blkio.IoWaitTimeRecursive),
-			IoMergedRecursive:       copyBlkioEntry(stats.Blkio.IoMergedRecursive),
-			IoTimeRecursive:         copyBlkioEntry(stats.Blkio.IoTimeRecursive),
-			SectorsRecursive:        copyBlkioEntry(stats.Blkio.SectorsRecursive),
-		}
-	}
-	if stats.CPU != nil {
-		s.CPUStats = types.CPUStats{
-			CPUUsage: types.CPUUsage{
-				TotalUsage:        stats.CPU.Usage.Total,
-				PercpuUsage:       stats.CPU.Usage.PerCPU,
-				UsageInKernelmode: stats.CPU.Usage.Kernel,
-				UsageInUsermode:   stats.CPU.Usage.User,
-			},
-			ThrottlingData: types.ThrottlingData{
-				Periods:          stats.CPU.Throttling.Periods,
-				ThrottledPeriods: stats.CPU.Throttling.ThrottledPeriods,
-				ThrottledTime:    stats.CPU.Throttling.ThrottledTime,
-			},
-		}
-	}
-
-	if stats.Memory != nil {
-		raw := make(map[string]uint64)
-		raw["cache"] = stats.Memory.Cache
-		raw["rss"] = stats.Memory.RSS
-		raw["rss_huge"] = stats.Memory.RSSHuge
-		raw["mapped_file"] = stats.Memory.MappedFile
-		raw["dirty"] = stats.Memory.Dirty
-		raw["writeback"] = stats.Memory.Writeback
-		raw["pgpgin"] = stats.Memory.PgPgIn
-		raw["pgpgout"] = stats.Memory.PgPgOut
-		raw["pgfault"] = stats.Memory.PgFault
-		raw["pgmajfault"] = stats.Memory.PgMajFault
-		raw["inactive_anon"] = stats.Memory.InactiveAnon
-		raw["active_anon"] = stats.Memory.ActiveAnon
-		raw["inactive_file"] = stats.Memory.InactiveFile
-		raw["active_file"] = stats.Memory.ActiveFile
-		raw["unevictable"] = stats.Memory.Unevictable
-		raw["hierarchical_memory_limit"] = stats.Memory.HierarchicalMemoryLimit
-		raw["hierarchical_memsw_limit"] = stats.Memory.HierarchicalSwapLimit
-		raw["total_cache"] = stats.Memory.TotalCache
-		raw["total_rss"] = stats.Memory.TotalRSS
-		raw["total_rss_huge"] = stats.Memory.TotalRSSHuge
-		raw["total_mapped_file"] = stats.Memory.TotalMappedFile
-		raw["total_dirty"] = stats.Memory.TotalDirty
-		raw["total_writeback"] = stats.Memory.TotalWriteback
-		raw["total_pgpgin"] = stats.Memory.TotalPgPgIn
-		raw["total_pgpgout"] = stats.Memory.TotalPgPgOut
-		raw["total_pgfault"] = stats.Memory.TotalPgFault
-		raw["total_pgmajfault"] = stats.Memory.TotalPgMajFault
-		raw["total_inactive_anon"] = stats.Memory.TotalInactiveAnon
-		raw["total_active_anon"] = stats.Memory.TotalActiveAnon
-		raw["total_inactive_file"] = stats.Memory.TotalInactiveFile
-		raw["total_active_file"] = stats.Memory.TotalActiveFile
-		raw["total_unevictable"] = stats.Memory.TotalUnevictable
-
-		if stats.Memory.Usage != nil {
-			s.MemoryStats = types.MemoryStats{
-				Stats:    raw,
-				Usage:    stats.Memory.Usage.Usage,
-				MaxUsage: stats.Memory.Usage.Max,
-				Limit:    stats.Memory.Usage.Limit,
-				Failcnt:  stats.Memory.Usage.Failcnt,
-			}
-		} else {
-			s.MemoryStats = types.MemoryStats{
-				Stats: raw,
-			}
-		}
-
-		// if the container does not set memory limit, use the machineMemory
-		if s.MemoryStats.Limit > daemon.machineMemory && daemon.machineMemory > 0 {
-			s.MemoryStats.Limit = daemon.machineMemory
-		}
-	}
-
-	if stats.Pids != nil {
-		s.PidsStats = types.PidsStats{
-			Current: stats.Pids.Current,
-			Limit:   stats.Pids.Limit,
-		}
-	}
-
-	return s, nil
-}
-
-func (daemon *Daemon) statsV2(s *types.StatsJSON, stats *statsV2.Metrics) (*types.StatsJSON, error) {
-	if stats.Io != nil {
-		var isbr []types.BlkioStatEntry
-		for _, re := range stats.Io.Usage {
-			isbr = append(isbr,
-				types.BlkioStatEntry{
-					Major: re.Major,
-					Minor: re.Minor,
-					Op:    "read",
-					Value: re.Rbytes,
-				},
-				types.BlkioStatEntry{
-					Major: re.Major,
-					Minor: re.Minor,
-					Op:    "write",
-					Value: re.Wbytes,
-				},
-			)
-		}
-		s.BlkioStats = types.BlkioStats{
-			IoServiceBytesRecursive: isbr,
-			// Other fields are unsupported
-		}
-	}
-
-	if stats.CPU != nil {
-		s.CPUStats = types.CPUStats{
-			CPUUsage: types.CPUUsage{
-				TotalUsage: stats.CPU.UsageUsec * 1000,
-				// PercpuUsage is not supported
-				UsageInKernelmode: stats.CPU.SystemUsec * 1000,
-				UsageInUsermode:   stats.CPU.UserUsec * 1000,
-			},
-			ThrottlingData: types.ThrottlingData{
-				Periods:          stats.CPU.NrPeriods,
-				ThrottledPeriods: stats.CPU.NrThrottled,
-				ThrottledTime:    stats.CPU.ThrottledUsec * 1000,
-			},
-		}
-	}
-
-	if stats.Memory != nil {
-		raw := make(map[string]uint64)
-		raw["anon"] = stats.Memory.Anon
-		raw["file"] = stats.Memory.File
-		raw["kernel_stack"] = stats.Memory.KernelStack
-		raw["slab"] = stats.Memory.Slab
-		raw["sock"] = stats.Memory.Sock
-		raw["shmem"] = stats.Memory.Shmem
-		raw["file_mapped"] = stats.Memory.FileMapped
-		raw["file_dirty"] = stats.Memory.FileDirty
-		raw["file_writeback"] = stats.Memory.FileWriteback
-		raw["anon_thp"] = stats.Memory.AnonThp
-		raw["inactive_anon"] = stats.Memory.InactiveAnon
-		raw["active_anon"] = stats.Memory.ActiveAnon
-		raw["inactive_file"] = stats.Memory.InactiveFile
-		raw["active_file"] = stats.Memory.ActiveFile
-		raw["unevictable"] = stats.Memory.Unevictable
-		raw["slab_reclaimable"] = stats.Memory.SlabReclaimable
-		raw["slab_unreclaimable"] = stats.Memory.SlabUnreclaimable
-		raw["pgfault"] = stats.Memory.Pgfault
-		raw["pgmajfault"] = stats.Memory.Pgmajfault
-		raw["workingset_refault"] = stats.Memory.WorkingsetRefault
-		raw["workingset_activate"] = stats.Memory.WorkingsetActivate
-		raw["workingset_nodereclaim"] = stats.Memory.WorkingsetNodereclaim
-		raw["pgrefill"] = stats.Memory.Pgrefill
-		raw["pgscan"] = stats.Memory.Pgscan
-		raw["pgsteal"] = stats.Memory.Pgsteal
-		raw["pgactivate"] = stats.Memory.Pgactivate
-		raw["pgdeactivate"] = stats.Memory.Pgdeactivate
-		raw["pglazyfree"] = stats.Memory.Pglazyfree
-		raw["pglazyfreed"] = stats.Memory.Pglazyfreed
-		raw["thp_fault_alloc"] = stats.Memory.ThpFaultAlloc
-		raw["thp_collapse_alloc"] = stats.Memory.ThpCollapseAlloc
-		s.MemoryStats = types.MemoryStats{
-			// Stats is not compatible with v1
-			Stats: raw,
-			Usage: stats.Memory.Usage,
-			// MaxUsage is not supported
-			Limit: stats.Memory.UsageLimit,
-		}
-		// if the container does not set memory limit, use the machineMemory
-		if s.MemoryStats.Limit > daemon.machineMemory && daemon.machineMemory > 0 {
-			s.MemoryStats.Limit = daemon.machineMemory
-		}
-		if stats.MemoryEvents != nil {
-			// Failcnt is set to the "oom" field of the "memory.events" file.
-			// See https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
-			s.MemoryStats.Failcnt = stats.MemoryEvents.Oom
-		}
-	}
-
-	if stats.Pids != nil {
-		s.PidsStats = types.PidsStats{
-			Current: stats.Pids.Current,
-			Limit:   stats.Pids.Limit,
-		}
-	}
-
-	return s, nil
-}
-
 // setDefaultIsolation determines the default isolation mode for the
 // daemon to run in. This is only applicable on Windows
 func (daemon *Daemon) setDefaultIsolation() error {
-	return nil
-}
-
-// setupDaemonProcess sets various settings for the daemon's process
-func setupDaemonProcess(config *config.Config) error {
-	// setup the daemons oom_score_adj
-	if err := setupOOMScoreAdj(config.OOMScoreAdjust); err != nil {
-		return err
-	}
-	if err := setMayDetachMounts(); err != nil {
-		logrus.WithError(err).Warn("Could not set may_detach_mounts kernel parameter")
-	}
 	return nil
 }
 
@@ -1635,76 +1251,14 @@ func setMayDetachMounts() error {
 	return err
 }
 
-func setupOOMScoreAdj(score int) error {
-	f, err := os.OpenFile("/proc/self/oom_score_adj", os.O_WRONLY, 0)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	stringScore := strconv.Itoa(score)
-	_, err = f.WriteString(stringScore)
-	if os.IsPermission(err) {
-		// Setting oom_score_adj does not work in an
-		// unprivileged container. Ignore the error, but log
-		// it if we appear not to be in that situation.
-		if !sys.RunningInUserNS() {
-			logrus.Debugf("Permission denied writing %q to /proc/self/oom_score_adj", stringScore)
-		}
-		return nil
-	}
-
-	return err
-}
-
-func (daemon *Daemon) initCPURtController(mnt, path string) error {
-	if path == "/" || path == "." {
-		return nil
-	}
-
-	// Recursively create cgroup to ensure that the system and all parent cgroups have values set
-	// for the period and runtime as this limits what the children can be set to.
-	if err := daemon.initCPURtController(mnt, filepath.Dir(path)); err != nil {
-		return err
-	}
-
-	path = filepath.Join(mnt, path)
-	if err := os.MkdirAll(path, 0755); err != nil {
-		return err
-	}
-	if err := maybeCreateCPURealTimeFile(daemon.configStore.CPURealtimePeriod, "cpu.rt_period_us", path); err != nil {
-		return err
-	}
-	return maybeCreateCPURealTimeFile(daemon.configStore.CPURealtimeRuntime, "cpu.rt_runtime_us", path)
-}
-
 func maybeCreateCPURealTimeFile(configValue int64, file string, path string) error {
-	if configValue == 0 {
-		return nil
+	if configValue != 0 {
+		if err := os.MkdirAll(path, 0755); err != nil {
+			return err
+		}
+		if err := ioutil.WriteFile(filepath.Join(path, file), []byte(strconv.FormatInt(configValue, 10)), 0700); err != nil {
+			return err
+		}
 	}
 	return ioutil.WriteFile(filepath.Join(path, file), []byte(strconv.FormatInt(configValue, 10)), 0700)
-}
-
-func (daemon *Daemon) setupSeccompProfile() error {
-	if daemon.configStore.SeccompProfile != "" {
-		daemon.seccompProfilePath = daemon.configStore.SeccompProfile
-		b, err := ioutil.ReadFile(daemon.configStore.SeccompProfile)
-		if err != nil {
-			return fmt.Errorf("opening seccomp profile (%s) failed: %v", daemon.configStore.SeccompProfile, err)
-		}
-		daemon.seccompProfile = b
-	}
-	return nil
-}
-
-// RawSysInfo returns *sysinfo.SysInfo .
-func (daemon *Daemon) RawSysInfo(quiet bool) *sysinfo.SysInfo {
-	var opts []sysinfo.Opt
-	if daemon.getCgroupDriver() == cgroupSystemdDriver {
-		rootlesskitParentEUID := os.Getenv("ROOTLESSKIT_PARENT_EUID")
-		if rootlesskitParentEUID != "" {
-			groupPath := fmt.Sprintf("/user.slice/user-%s.slice", rootlesskitParentEUID)
-			opts = append(opts, sysinfo.WithCgroup2GroupPath(groupPath))
-		}
-	}
-	return sysinfo.New(quiet, opts...)
 }

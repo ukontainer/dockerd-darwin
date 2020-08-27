@@ -1,5 +1,3 @@
-// +build !windows,!darwin
-
 package daemon
 
 import (
@@ -20,10 +18,10 @@ import (
 )
 
 const (
-	defaultRuntimeName = "runc"
+	defaultRuntimeName = "runu"
 
 	linuxShimV1 = "io.containerd.runtime.v1.linux"
-	linuxShimV2 = "io.containerd.runc.v2"
+	linuxShimV2 = "io.containerd.darwin.v1"
 )
 
 func configureRuntimes(conf *config.Config) {

@@ -24,5 +24,8 @@ func ValidatePlatform(_ specs.Platform) error {
 
 // IsOSSupported determines if an operating system is supported by the host.
 func IsOSSupported(os string) bool {
+	if runtime.GOOS == "darwin" && strings.EqualFold(os, "linux") {
+		return true
+	}
 	return strings.EqualFold(runtime.GOOS, os)
 }

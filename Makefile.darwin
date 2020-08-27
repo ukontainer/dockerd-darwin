@@ -1,0 +1,13 @@
+# This file exists to support the non-Docker-based build requirements for
+# Docker darwin
+#
+# Hacking GOPATH to take the first directory in the list and use that to clone
+# our dependencies
+
+export GO_PATH=$(firstword $(subst :, ,$(GOPATH)))
+export AUTO_GO_PATH=1
+
+all: binary
+
+binary:
+	./hack/make.sh dynbinary

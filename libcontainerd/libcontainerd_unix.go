@@ -1,3 +1,5 @@
+// +build linux darwin
+
 package libcontainerd // import "github.com/docker/docker/libcontainerd"
 
 import (

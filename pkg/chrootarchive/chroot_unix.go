@@ -2,7 +2,11 @@
 
 package chrootarchive // import "github.com/docker/docker/pkg/chrootarchive"
 
-import "golang.org/x/sys/unix"
+import (
+	"fmt"
+
+	"golang.org/x/sys/unix"
+)
 
 func chroot(path string) error {
 	if err := unix.Chroot(path); err != nil {
@@ -12,5 +16,11 @@ func chroot(path string) error {
 }
 
 func realChroot(path string) error {
-	return chroot(path)
+	if err := unix.Chroot(path); err != nil {
+		return fmt.Errorf("Error after fallback to chroot: %v", err)
+	}
+	if err := unix.Chdir("/"); err != nil {
+		return fmt.Errorf("Error changing to new root after chroot: %v", err)
+	}
+	return nil
 }

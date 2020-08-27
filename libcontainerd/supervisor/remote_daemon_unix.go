@@ -1,3 +1,5 @@
+// +build linux darwin
+
 package supervisor // import "github.com/docker/docker/libcontainerd/supervisor"
 
 import (

@@ -11,6 +11,7 @@ import (
 	"github.com/docker/docker/daemon/config"
 	"github.com/docker/docker/pkg/idtools"
 	"github.com/docker/docker/pkg/stringid"
+	"github.com/docker/docker/daemon"
 	"github.com/docker/libnetwork"
 	"github.com/moby/buildkit/executor"
 	"github.com/moby/buildkit/executor/oci"
@@ -32,7 +33,7 @@ func newExecutor(root, cgroupParent string, net libnetwork.NetworkController, dn
 	}
 	return runcexecutor.New(runcexecutor.Opt{
 		Root:                filepath.Join(root, "executor"),
-		CommandCandidates:   []string{"runc"},
+		CommandCandidates:   []string{daemon.DefaultShimBinary},
 		DefaultCgroupParent: cgroupParent,
 		Rootless:            rootless,
 		NoPivot:             os.Getenv("DOCKER_RAMDISK") != "",

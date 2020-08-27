@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 
 	"github.com/docker/distribution"
@@ -169,7 +170,7 @@ func (ls *layerStore) loadLayer(layer ChainID) (*roLayer, error) {
 		return nil, fmt.Errorf("failed to get operating system for %s: %s", layer, err)
 	}
 
-	if os != ls.os {
+	if os != ls.os && runtime.GOOS != "darwin" {
 		return nil, fmt.Errorf("failed to load layer with os %s into layerstore for %s", os, ls.os)
 	}
 

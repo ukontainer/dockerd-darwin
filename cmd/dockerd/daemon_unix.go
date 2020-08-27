@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -62,17 +63,28 @@ func getDaemonConfDir(_ string) (string, error) {
 }
 
 func (cli *DaemonCli) getPlatformContainerdDaemonOpts() ([]supervisor.DaemonOpt, error) {
-	opts := []supervisor.DaemonOpt{
-		supervisor.WithOOMScore(cli.Config.OOMScoreAdjust),
-		supervisor.WithPlugin("linux", &linux.Config{
-			Shim:        daemon.DefaultShimBinary,
-			Runtime:     daemon.DefaultRuntimeBinary,
-			RuntimeRoot: filepath.Join(cli.Config.Root, "runc"),
-			ShimDebug:   cli.Config.Debug,
-		}),
+	if runtime.GOOS == "darwin" {
+		opts := []supervisor.DaemonOpt{
+			supervisor.WithPlugin("linux", &linux.Config{
+				Shim:        daemon.DefaultShimBinary,
+				Runtime:     "runu",
+				RuntimeRoot: filepath.Join(cli.Config.Root, "runu"),
+				ShimDebug:   cli.Config.Debug,
+			}),
+		}
+		return opts, nil
+	} else {
+		opts := []supervisor.DaemonOpt{
+			supervisor.WithOOMScore(cli.Config.OOMScoreAdjust),
+			supervisor.WithPlugin("linux", &linux.Config{
+				Shim:        daemon.DefaultShimBinary,
+				Runtime:     daemon.DefaultRuntimeBinary,
+				RuntimeRoot: filepath.Join(cli.Config.Root, "runc"),
+				ShimDebug:   cli.Config.Debug,
+			}),
+		}
+		return opts, nil
 	}
-
-	return opts, nil
 }
 
 // setupConfigReloadTrap configures the SIGHUP signal to reload the configuration.
